@@ -14,7 +14,6 @@ import (
 	"github.com/TomyQB/mem-cli/internal/tui/home"
 	"github.com/TomyQB/mem-cli/internal/tui/menu"
 	"github.com/TomyQB/mem-cli/internal/tui/messages"
-	"github.com/TomyQB/mem-cli/internal/tui/preview"
 )
 
 // Run starts the interactive TUI on the Menu screen. Returns any non-nil error
@@ -28,7 +27,7 @@ func Run() error {
 		fmt.Println("warning: failed to load registry:", err)
 	}
 	root := newRootModel(reg)
-	p := tea.NewProgram(root)
+	p := tea.NewProgram(root, tea.WithAltScreen())
 	_, err = p.Run()
 	return err
 }
@@ -156,27 +155,13 @@ func (m rootModel) openModal(modal tea.Model) tea.Model {
 	return modal
 }
 
-// pop removes the top screen from the stack. If the popped screen is a Preview,
-// it returns tea.ExitAltScreen to leave fullscreen mode.
+// pop removes the top screen from the stack.
 func (m rootModel) pop() (rootModel, tea.Cmd) {
 	if len(m.stack) <= 1 {
 		return m, nil
 	}
-	popped := m.stack[len(m.stack)-1]
 	m.stack = m.stack[:len(m.stack)-1]
-	if isPreview(popped) {
-		return m, tea.ExitAltScreen
-	}
 	return m, nil
-}
-
-// isPreview returns true if the screen is a preview.Model (value or pointer).
-func isPreview(s messages.Screen) bool {
-	switch s.(type) {
-	case preview.Model, *preview.Model:
-		return true
-	}
-	return false
 }
 
 // handleMenuAction wires Menu selections to their corresponding effects.

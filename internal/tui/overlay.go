@@ -16,10 +16,10 @@ func (m rootModel) pushProject(msg messages.ProjectSelectedMsg) rootModel {
 	return m.pushScreen(project.New(msg.Entry))
 }
 
-// pushPreview pushes a Preview screen and enters AltScreen (fullscreen).
+// pushPreview pushes a Preview screen for the selected doc.
 func (m rootModel) pushPreview(msg messages.DocSelectedMsg) (rootModel, tea.Cmd) {
 	m = m.pushScreen(preview.New(msg.Path))
-	return m, tea.EnterAltScreen
+	return m, nil
 }
 
 // pushScreen pre-sizes a screen with the current terminal dimensions and
