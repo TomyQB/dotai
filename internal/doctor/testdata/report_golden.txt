@@ -1,7 +1,0 @@
-  ✓  skill memcli-init
-  ✗  skill memcli-update
-      → missing: /tmp/x  (run: memcli install)
-  ✓  project .agent-memory/index.md
-  ✓  .stale status
-
-1 check(s) failed.

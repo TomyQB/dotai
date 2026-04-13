@@ -137,6 +137,35 @@ var (
 			Background(lipgloss.Color(ColorDanger)).
 			Padding(0, 1)
 	dim = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtle))
+
+	// Wizard-specific styles.
+
+	// StepProgress renders the "Step N/6" counter in the step header.
+	StepProgress = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorPrimaryBold))
+
+	// CheckOn renders a selected/enabled indicator in success green.
+	CheckOn = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorSuccess))
+
+	// CheckOff renders a deselected/disabled indicator in muted gray.
+	CheckOff = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorMuted))
+
+	// SummaryCheck renders a confirmed item on the summary screen.
+	SummaryCheck = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorSuccess))
+
+	// SummarySkip renders a skipped item on the summary screen.
+	SummarySkip = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorMuted))
+
+	// WarningText renders a bold warning message in amber.
+	WarningText = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorWarning))
+
+	// ProgressDone renders a completed progress indicator in success green.
+	ProgressDone = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSuccess))
+
+	// ProgressError renders a failed progress indicator in red, bold.
+	ProgressError = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorDanger))
+
+	// Cursor renders the selection cursor glyph in primary violet.
+	Cursor = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorPrimary))
 )
 
 // BadgeOK renders the OK badge text.

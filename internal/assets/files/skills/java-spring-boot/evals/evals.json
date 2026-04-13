@@ -1,0 +1,23 @@
+{
+  "skill_name": "java-spring-boot",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Crea una clase de configuracion con dos RestClient beans nombrados: uno para el servicio de pagos (payments-api) y otro para el servicio de notificaciones (notifications-api). Ambos deben tener base URL desde ConfigurationProperties y timeouts configurados.",
+      "expected_output": "Configuration class with two named @Bean RestClient methods, each with base URL from @ConfigurationProperties record, connect/read timeouts, and proper @Qualifier injection pattern",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Crea un HandlerInterceptor que lea el header X-Openpay-Trace-Id, lo ponga en MDC, y controle concurrencia con un Semaphore que permita maximo 1 peticion simultanea por traceId+endpoint. Incluye el registro en WebMvcConfigurer.",
+      "expected_output": "HandlerInterceptor with MDC trace propagation, Semaphore-based concurrency control, and WebMvcConfigurer registration with path patterns",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Crea una entidad MongoDB llamada PartnerEntity con auditoria completa (AuditMetadata base class), indices en merchantId (unique) y status, y un MongoRepository con una query custom que busque por status y fecha de creacion mayor a una fecha dada.",
+      "expected_output": "MongoDB entity extending AuditMetadata with @SuperBuilder, @Document with explicit collection, @Indexed fields, @CompoundIndex, and MongoRepository with @Query using MongoDB JSON syntax",
+      "files": []
+    }
+  ]
+}

@@ -1,139 +1,122 @@
-// Package menu implements the root landing screen of the TUI: an ASCII banner
-// with a short list of top-level actions. Rendering is done by hand (no
-// bubbles/list) so we have exact control over selection chrome and colors.
+// Package menu implements the main menu screen for dotai.
+// It renders the dotai banner followed by a list of navigable actions.
 package menu
 
 import (
-	"strings"
-	"time"
-
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/TomyQB/mem-cli/internal/tui/banner"
-	"github.com/TomyQB/mem-cli/internal/tui/styles"
+	"github.com/TomyQB/dotai/internal/tui/banner"
+	"github.com/TomyQB/dotai/internal/tui/styles"
 )
 
-// Action identifies which top-level operation the user picked.
+// Action identifies a menu item choice.
 type Action int
 
 const (
-	ActionNone Action = iota
-	ActionInstall
-	ActionBrowseProjects
-	ActionDoctorCWD
-	ActionPruneRegistry
+	ActionInstall Action = iota
+	ActionStatus
+	ActionMemcli
+	ActionDoctor
 	ActionQuit
 )
 
-// SelectedMsg is emitted when the user presses enter on a menu item.
+// SelectedMsg is emitted when the user confirms a menu item.
 type SelectedMsg struct{ Action Action }
 
-// ToastMsg sets a transient status line shown under the menu.
-type ToastMsg struct{ Text string }
-
-// clearToastMsg clears the transient status line.
-type clearToastMsg struct{}
-
-// item is one row on the menu.
-type item struct {
-	label  string
+// menuItem groups the data for a single menu row.
+type menuItem struct {
 	action Action
+	label  string
+	desc   string
 }
 
-var items = []item{
-	{"Install / Reinstall", ActionInstall},
-	{"Browse projects", ActionBrowseProjects},
-	{"Doctor (current directory)", ActionDoctorCWD},
-	{"Prune registry", ActionPruneRegistry},
-	{"Quit", ActionQuit},
-}
-
-// Model is the menu screen state.
+// Model is the Bubble Tea model for the main menu screen.
 type Model struct {
-	cursor int
-	width  int
-	height int
-	toast  string
+	items         []menuItem
+	cursor        int
+	width, height int
 }
 
-// New creates a Menu model with the cursor on the first item.
-func New() Model { return Model{} }
+// New returns an initialised menu Model.
+func New() Model {
+	return Model{
+		items: []menuItem{
+			{ActionInstall, "Install", "Setup wizard"},
+			{ActionStatus, "Status", "What's installed"},
+			{ActionMemcli, "Memcli", "Manage memcli"},
+			{ActionDoctor, "Doctor", "Diagnose issues"},
+			{ActionQuit, "Quit", ""},
+		},
+	}
+}
 
 // Title satisfies messages.Screen.
-func (m Model) Title() string { return "menu" }
+func (m Model) Title() string { return "dotai" }
 
-// Init satisfies tea.Model.
+// Init satisfies tea.Model — no I/O needed on entry.
 func (m Model) Init() tea.Cmd { return nil }
 
-// Update handles messages for the Menu screen.
+// Update handles key events.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		return m, nil
-	case ToastMsg:
-		m.toast = msg.Text
-		return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return clearToastMsg{} })
-	case clearToastMsg:
-		m.toast = ""
-		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c":
-			return m, tea.Quit
-		case "j", "down":
-			if m.cursor < len(items)-1 {
-				m.cursor++
-			}
-			return m, nil
-		case "k", "up":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-			return m, nil
-		case "enter":
-			action := items[m.cursor].action
-			if action == ActionQuit {
+		case "up", "k":
+			m.cursor = (m.cursor - 1 + len(m.items)) % len(m.items)
+		case "down", "j":
+			m.cursor = (m.cursor + 1) % len(m.items)
+		case "enter", " ":
+			selected := m.items[m.cursor]
+			if selected.action == ActionQuit {
 				return m, tea.Quit
 			}
-			return m, func() tea.Msg { return SelectedMsg{Action: action} }
+			return m, func() tea.Msg { return SelectedMsg{Action: selected.action} }
+		case "q":
+			return m, tea.Quit
 		}
 	}
 	return m, nil
 }
 
-// View renders the Menu screen using FrameCompact (no alt-screen stretching).
+// SetSize stores the terminal dimensions (satisfies messages.Screen).
+func (m *Model) SetSize(w, h int) {
+	m.width = w
+	m.height = h
+}
+
+// View renders the menu inside a FrameCompact border.
 func (m Model) View() string {
-	header := banner.Render(styles.CompactInnerWidth)
-	body := m.renderBody()
-	footer := styles.FooterHints(
-		"j/k", "navigate",
-		"enter", "select",
-		"q", "quit",
-	)
+	innerWidth := styles.CompactInnerWidth
+
+	header := banner.Render(innerWidth) + "\n"
+
+	var body string
+	for i, item := range m.items {
+		var row string
+		if i == m.cursor {
+			row = styles.Arrow.Render("▸ ") +
+				styles.MenuItemSelected.Render(item.label)
+			if item.desc != "" {
+				row += "  " + styles.Footer.Render(item.desc)
+			}
+		} else {
+			row = "  " + styles.MenuItem.Render(item.label)
+			if item.desc != "" {
+				row += "  " + styles.Footer.Render(item.desc)
+			}
+		}
+		if i < len(m.items)-1 {
+			body += row + "\n"
+		} else {
+			body += row
+		}
+	}
+
+	footer := m.Footer()
 	return styles.FrameCompact(header, body, footer, styles.CompactWidth)
 }
 
-func (m Model) renderBody() string {
-	var b strings.Builder
-	b.WriteString(styles.SectionTitle.Render("Menu"))
-	b.WriteString("\n\n")
-	for i, it := range items {
-		if i == m.cursor {
-			b.WriteString("  ")
-			b.WriteString(styles.Arrow.Render("▸ "))
-			b.WriteString(styles.MenuItemSelected.Render(it.label))
-		} else {
-			b.WriteString("    ")
-			b.WriteString(styles.MenuItem.Render(it.label))
-		}
-		b.WriteString("\n")
-	}
-	if m.toast != "" {
-		b.WriteString("\n")
-		b.WriteString(styles.Toast.Render(m.toast))
-		b.WriteString("\n")
-	}
-	return b.String()
+// Footer returns the key-hint line for the menu.
+func (m Model) Footer() string {
+	return styles.FooterHints("↑/↓", "navigate", "enter", "select", "q", "quit")
 }
