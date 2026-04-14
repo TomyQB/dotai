@@ -1,128 +1,127 @@
-# mem-cli
+<div align="center">
 
-Living agent-facing documentation for your projects, enforced by hooks.
+![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=for-the-badge&logo=go&logoColor=white)
+![Bubbletea](https://img.shields.io/badge/Bubbletea-TUI-FF75B7?style=for-the-badge&logo=charmbracelet&logoColor=white)
+![Claude Code](https://img.shields.io/badge/Claude_Code-Provider-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
+![GoReleaser](https://img.shields.io/badge/GoReleaser-Homebrew-1E1E1E?style=for-the-badge&logo=homebrew&logoColor=white)
 
-mem-cli installs a set of Claude Code skills, an agent (`doc-keeper`), and two
-hooks that keep `.agent-memory/` in sync with your source code **automatically
-and obligatorily**.
+# dotai
 
-This documentation is **not for humans**. It is for AI agents that need
-on-demand context about flows, APIs, architecture and domain when they work on
-your codebase.
+Interactive terminal wizard that configures your AI coding environment — profiles, skills, status line, git hooks, and living agent docs — in one guided flow.
 
-## Install
+</div>
 
-```bash
-go build -o ~/.local/bin/memcli ./cmd/memcli
-memcli install
-```
+## Features
 
-This writes:
+- **Landing menu**: single TUI entry point with Install, Status, Memcli, Doctor and Quit screens built on Bubbletea with stack-based navigation.
+- **Profile-driven install**: pick `Personal` or `Work` and dotai lays down `settings.json`, the status line, the git branch hook and the matching `CLAUDE.md` in one step.
+- **Global skills catalog**: multi-select checklist to install curated skills (`commit-and-push`, `owasp-audit`, `readme-generator`, `skill-creator`, `web3-audit`, `web3-review`, `java-review`, `java-spring-boot`, `junit-mockito`).
+- **Memcli integration**: optional living `.agent-memory/` documentation — installs skills, the `doc-keeper` agent and Stop/pre-commit hooks that keep docs in sync with the code.
+- **Provider-agnostic core**: `internal/provider` abstracts Claude Code today; the wizard, detect and assets layers are ready for other providers without structural changes.
+- **Component detection**: `internal/detect` inspects the filesystem so the Status and Doctor screens show exactly what is installed, stale or missing.
+- **Safe CLI**: refuses to launch the TUI when stdout is not a terminal (piped, redirected, CI), so it never emits ANSI escapes into logs.
 
-- `~/.claude/skills/memcli-{init,update,scan,doctor}/SKILL.md`
-- `~/.claude/agents/doc-keeper.md`
-- `~/.claude/mem-cli/hooks/{stop-hook.sh,pre-commit.sh}`
-- Merges a `Stop` hook entry into `~/.claude/settings.json`
+## Overview
 
-## Bootstrap a project
+Setting up an AI coding workspace means editing JSON settings, dropping shell hooks, copying skill folders and keeping a `CLAUDE.md` in sync — tasks that are fiddly, easy to get wrong and hard to reproduce across machines or between personal and work contexts. dotai centralises that setup behind one binary.
 
-Open Claude Code inside any git repo and run:
+The tool ships every asset embedded inside the Go binary (`internal/assets/files`) and renders a Bubbletea TUI that walks you through profile, skills and memcli decisions. Each step runs an idempotent executor against the active provider (`internal/provider/claude`), so re-running dotai converges the environment instead of duplicating state. The same provider abstraction powers Status and Doctor, which read back the installed components instead of trusting the wizard.
 
-```
-/memcli-init
-```
-
-This creates `.agent-memory/`, installs the git pre-commit hook in
-`.git/hooks/pre-commit`, and registers the project in
-`~/.claude/memcli/projects.json`.
-
-Optionally, for an existing codebase:
-
-```
-/memcli-scan
-```
-
-to dispatch explorer agents that generate initial flows, architecture, API and
-domain docs from the current code.
-
-## Workflow
-
-1. You work normally with Claude Code on your repo.
-2. When the agent stops, the `Stop` hook inspects the working tree, filters
-   out changes that don't matter (tests, styles, types, renames, docs,
-   lockfiles, assets) and cross-references the surviving paths against the
-   `watches` frontmatter of every doc under `.agent-memory/`.
-3. Any doc whose watches match a changed path is appended to
-   `.agent-memory/.stale`.
-4. When you try to `git commit`, the pre-commit hook reads `.stale`. If it is
-   non-empty, the commit is **blocked** with a message telling you to run
-   `/memcli-update` inside Claude Code.
-5. `/memcli-update` reads `.stale` and dispatches the `doc-keeper` agent
-   (one per stale doc, in parallel) to **regenerate each doc from scratch**
-   based on the current source code. Only when all succeed, `.stale` is
-   cleared. Then the commit goes through.
-
-## Doc contract
-
-Every `.md` under `.agent-memory/` must have frontmatter with a `watches` list:
-
-```yaml
----
-id: signup-flow
-watches:
-  - src/features/signup/**
-  - src/api/signup/**
-last_updated: 2026-04-09
----
-```
-
-Each doc must contain BOTH:
-
-- **Functional context** — what the user experiences, with a Mermaid
-  `flowchart` or `stateDiagram`.
-- **Technical context** — front↔back calls in order, with a Mermaid
-  `sequenceDiagram`, plus relevant files and side effects.
+Typical flow: launch `dotai` → pick `Install` → choose Personal or Work → tick the skills you want → opt in or out of memcli → return to the menu to verify everything with `Status` or `Doctor`.
 
 ## Commands
 
-- `memcli` — launch the interactive TUI (when stdout is a TTY)
-- `memcli install` — install skills/agents/hooks globally
-- `memcli doctor` — verify global + project state
-- `memcli registry prune` — remove registry entries whose path no longer exists
-- `memcli version` — print version
+| Command | Description |
+|---|---|
+| `dotai` | Launch the interactive landing menu (requires a TTY). |
+| `dotai version` | Print the dotai version. |
+| `dotai help` | Show usage and available commands. |
 
-When stdout is **not** a TTY (piped, redirected, CI), `memcli` with no args
-prints usage and exits 0 — it never starts the Bubbletea event loop and never
-emits ANSI escape sequences.
+## Menu Screens
 
-Project-level operations (`init`, `update`, `scan`, `doctor`) live as Claude
-Code skills and are invoked with `/memcli-<name>` from inside Claude Code, not
-from the terminal.
+| Screen | Description |
+|---|---|
+| `Install` | Runs the setup wizard: Profile → Skills → Memcli. |
+| `Status` | Lists every dotai component and reports `OK` / `MISSING`. |
+| `Memcli` | Dedicated panel to install, uninstall or inspect the memcli integration. |
+| `Doctor` | Diagnoses global and per-project state, flags drift or broken hooks. |
+| `Quit` | Exit the TUI. |
 
-## Interactive TUI
+## Wizard Steps
 
-Running `memcli` with no arguments in a terminal opens a Bubbletea UI with
-three screens:
+| Step | What it installs |
+|---|---|
+| `Profile` | `settings.json`, status-line script, git branch-check hook, `CLAUDE.md` (Personal or Work variant). |
+| `Skills` | Selected entries from the curated catalog into `~/.claude/skills/`. |
+| `Memcli` | `memcli-{init,update,scan,doctor}` skills, the `doc-keeper` agent and the Stop + pre-commit hooks that keep `.agent-memory/` fresh. |
 
-- **Home** — list of registered projects with status badges (`OK`, `STALE`,
-  `MISSING`). Press `enter` to open a project, `r` to refresh the registry
-  from disk, `d` to run doctor on the highlighted project (shown in a modal),
-  `q`/`esc` to quit.
-- **Project** — tree of `<project>/.agent-memory/`. Rows referenced in
-  `.stale` are marked. Press `enter` on a `.md` to preview, `esc` to go back.
-- **Preview** — scrollable Glamour-rendered markdown. Standard viewport
-  keys (`up`/`down`/`pgup`/`pgdn`/`j`/`k`), `esc` to go back.
+## Memcli Workflow
 
-The registry file lives at `~/.claude/memcli/projects.json` (schema v2, with
-transparent read-migration from the legacy v1 string-array shape).
+When memcli is enabled, the environment enforces living documentation for each registered project:
 
-## Engram
+1. You work normally with Claude Code on your repo.
+2. The Stop hook inspects the working tree, filters noise (tests, styles, lockfiles…) and marks any doc whose `watches` frontmatter matches a changed path as stale in `.agent-memory/.stale`.
+3. The pre-commit hook blocks the commit while `.stale` is non-empty.
+4. Running `/memcli-update` dispatches the `doc-keeper` agent in parallel, one per stale doc, to regenerate each from the current source.
+5. Once every doc is rebuilt, `.stale` is cleared and the commit proceeds.
 
-mem-cli is **NOT** Engram. Engram is session/decision memory; mem-cli is
-structural documentation of flows and architecture. They are kept strictly
-separate.
+Each `.md` under `.agent-memory/` must carry frontmatter with a `watches` list plus both functional (Mermaid `flowchart`/`stateDiagram`) and technical (`sequenceDiagram`) context.
+
+## Project Structure
+
+```
+cmd/
+  dotai/              # Binary entry point — flag parsing + Bubbletea bootstrap
+internal/
+  assets/             # Embedded profiles, skills, hooks, settings, memcli assets
+  detect/             # Component detection for Status/Doctor screens
+  provider/           # Provider abstraction (Claude Code implementation)
+    claude/
+  tui/
+    app/              # Stack-based screen navigation shell
+    menu/             # Landing menu screen
+    status/           # Status screen
+    memclipanel/      # Memcli management panel
+    doctor/           # Doctor diagnostics screen
+    banner/, styles/  # Shared rendering
+  wizard/             # Step contract, executor, summary
+    steps/            # Profile, Skills, Memcli step implementations
+  version/            # Single source of truth for the version string
+.goreleaser.yaml      # Cross-platform release pipeline (linux/darwin/windows, amd64/arm64)
+```
+
+## Requirements
+
+- [Go 1.25+](https://go.dev/dl/) to build from source.
+- A POSIX terminal emulator capable of rendering ANSI/true-color for the Bubbletea TUI.
+- [Claude Code](https://docs.claude.com/en/docs/claude-code) installed locally — dotai writes into its `~/.claude/` configuration tree.
+
+## Usage
+
+```shell
+# Build from source
+go build -o ~/.local/bin/dotai ./cmd/dotai
+
+# Launch the interactive menu
+dotai
+
+# Print version / help
+dotai version
+dotai help
+```
+
+## Testing
+
+The project ships unit tests across the wizard engine, steps, detect layer and TUI models.
+
+```shell
+# Run the full test suite
+go test ./...
+
+# Vet + tests with race detector
+go vet ./... && go test -race ./...
+```
 
 ## Status
 
-v0.1 — CLI (`install`, `doctor`, `registry prune`), Bubbletea TUI project
-browser, skills, agent, and hooks.
+v0.2 — landing menu with Install, Status, Memcli and Doctor screens. Profile-driven installer, curated skills catalog and memcli living-docs integration. Provider layer abstracted around Claude Code with room for additional providers.
