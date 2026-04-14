@@ -92,16 +92,44 @@ internal/
 
 ## Requirements
 
-- [Go 1.25+](https://go.dev/dl/) to build from source.
 - A POSIX terminal emulator capable of rendering ANSI/true-color for the Bubbletea TUI.
 - [Claude Code](https://docs.claude.com/en/docs/claude-code) installed locally — dotai writes into its `~/.claude/` configuration tree.
+- [Go 1.25+](https://go.dev/dl/) — only required if you build from source.
+
+## Install
+
+### Homebrew (recommended)
+
+```shell
+brew install TomyQB/tap/dotai
+```
+
+To upgrade to a newer release:
+
+```shell
+brew update && brew upgrade dotai
+```
+
+### Pre-built binary
+
+Download the archive for your OS/arch from the [latest release](https://github.com/TomyQB/dotai/releases/latest), extract it and place the binary on your `PATH`:
+
+```shell
+tar -xzf dotai_<version>_<os>_<arch>.tar.gz
+mv dotai ~/.local/bin/
+```
+
+Windows archives are distributed as `.zip`.
+
+### From source
+
+```shell
+go build -o ~/.local/bin/dotai ./cmd/dotai
+```
 
 ## Usage
 
 ```shell
-# Build from source
-go build -o ~/.local/bin/dotai ./cmd/dotai
-
 # Launch the interactive menu
 dotai
 
@@ -109,6 +137,8 @@ dotai
 dotai version
 dotai help
 ```
+
+After upgrading the binary, re-run `dotai` → **Install** to merge any new defaults (env vars, permissions, hooks) into your existing `~/.claude/settings.json` — the wizard is idempotent and only adds what is missing.
 
 ## Testing
 
@@ -124,4 +154,4 @@ go vet ./... && go test -race ./...
 
 ## Status
 
-v0.2 — landing menu with Install, Status, Memcli and Doctor screens. Profile-driven installer, curated skills catalog and memcli living-docs integration. Provider layer abstracted around Claude Code with room for additional providers.
+v0.2.2 — landing menu with Install, Status, Memcli and Doctor screens. Profile-driven installer, curated skills catalog and memcli living-docs integration. Provider layer abstracted around Claude Code with room for additional providers. Default `CLAUDE_CODE_NO_FLICKER=1` shipped via the install/upgrade flow.
