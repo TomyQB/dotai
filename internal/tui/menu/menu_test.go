@@ -32,21 +32,21 @@ func TestMenuInitialCursor(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected SelectedMsg, got %T", msg)
 	}
-	// After j (cursor=1) then enter → ActionStatus
-	if sel.Action != menu.ActionStatus {
-		t.Errorf("action = %v, want ActionStatus (%v)", sel.Action, menu.ActionStatus)
+	// After j (cursor=1) then enter → ActionUpdate
+	if sel.Action != menu.ActionUpdate {
+		t.Errorf("action = %v, want ActionUpdate (%v)", sel.Action, menu.ActionUpdate)
 	}
 	_ = updated
 }
 
 // TestMenuNavigation verifies j moves down, k moves up, and wrapping works.
 func TestMenuNavigation(t *testing.T) {
-	// Items in order: ActionInstall(0), ActionStatus(1), ActionMemcli(2), ActionDoctor(3), ActionQuit(4)
-	numItems := 5
+	// Items in order: ActionInstall(0), ActionUpdate(1), ActionStatus(2), ActionMemcli(3), ActionDoctor(4), ActionQuit(5)
+	numItems := 6
 
 	t.Run("j moves down", func(t *testing.T) {
 		m := menu.New()
-		// Press j once → cursor should be at 1 (ActionStatus)
+		// Press j once → cursor should be at 1 (ActionUpdate)
 		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 		tm := updated.(tea.Model)
 		updated2, cmd := tm.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -59,8 +59,8 @@ func TestMenuNavigation(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected SelectedMsg, got %T", msg)
 		}
-		if sel.Action != menu.ActionStatus {
-			t.Errorf("after j: action = %v, want ActionStatus", sel.Action)
+		if sel.Action != menu.ActionUpdate {
+			t.Errorf("after j: action = %v, want ActionUpdate", sel.Action)
 		}
 	})
 
@@ -79,15 +79,15 @@ func TestMenuNavigation(t *testing.T) {
 
 	t.Run("j wraps around to first", func(t *testing.T) {
 		m := menu.New()
-		// Press j 5 times to wrap around to index 0 again.
+		// Press j numItems times to wrap around to index 0 again.
 		var tm tea.Model = m
-		for i := 0; i < 5; i++ {
+		for i := 0; i < numItems; i++ {
 			updated, _ := tm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 			tm = updated.(tea.Model)
 		}
 		_, cmd := tm.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		if cmd == nil {
-			t.Fatal("nil cmd after 5×j + enter")
+			t.Fatal("nil cmd after numItems×j + enter")
 		}
 		msg := cmd()
 		sel, ok := msg.(menu.SelectedMsg)
@@ -95,7 +95,7 @@ func TestMenuNavigation(t *testing.T) {
 			t.Fatalf("expected SelectedMsg, got %T", msg)
 		}
 		if sel.Action != menu.ActionInstall {
-			t.Errorf("after 5×j (wrap): action = %v, want ActionInstall", sel.Action)
+			t.Errorf("after wrap: action = %v, want ActionInstall", sel.Action)
 		}
 	})
 }
@@ -105,10 +105,11 @@ func TestMenuNavigation(t *testing.T) {
 func TestMenuEnterEmitsSelectedMsg(t *testing.T) {
 	wantActions := []menu.Action{
 		menu.ActionInstall,
+		menu.ActionUpdate,
 		menu.ActionStatus,
 		menu.ActionMemcli,
 		menu.ActionDoctor,
-		// ActionQuit (index 4) emits tea.Quit — tested separately.
+		// ActionQuit (last index) emits tea.Quit — tested separately.
 	}
 
 	for i, want := range wantActions {

@@ -216,6 +216,11 @@ func (m *ProfileModel) Apply(state *wizard.WizardState) {
 			if err := tmpl.Execute(&sb, data); err == nil {
 				var base map[string]any
 				if err := json.Unmarshal([]byte(sb.String()), &base); err == nil {
+					// Persist the selected profile variant so future Update
+					// runs know which CLAUDE.md to re-copy without guessing.
+					base["_dotai"] = map[string]any{
+						"profile": state.ProfileType.String(),
+					}
 					state.Patch.BaseSettings = base
 				}
 			}

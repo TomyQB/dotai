@@ -12,6 +12,7 @@ import (
 	"github.com/TomyQB/dotai/internal/tui/menu"
 	"github.com/TomyQB/dotai/internal/tui/messages"
 	"github.com/TomyQB/dotai/internal/tui/status"
+	"github.com/TomyQB/dotai/internal/tui/updatescreen"
 	"github.com/TomyQB/dotai/internal/wizard"
 )
 
@@ -115,6 +116,11 @@ func (m Model) handleMenuAction(action menu.Action) (tea.Model, tea.Cmd) {
 		ws := newWizardScreen(m.prov, freshSteps)
 		m.push(ws)
 		return m, ws.Init()
+
+	case menu.ActionUpdate:
+		s := updatescreen.New(m.prov)
+		m.push(s)
+		return m, s.Init()
 
 	case menu.ActionStatus:
 		s := status.New(m.prov)

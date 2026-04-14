@@ -14,6 +14,7 @@ type Action int
 
 const (
 	ActionInstall Action = iota
+	ActionUpdate
 	ActionStatus
 	ActionMemcli
 	ActionDoctor
@@ -42,6 +43,7 @@ func New() Model {
 	return Model{
 		items: []menuItem{
 			{ActionInstall, "Install", "Setup wizard"},
+			{ActionUpdate, "Update", "Re-apply to installed"},
 			{ActionStatus, "Status", "What's installed"},
 			{ActionMemcli, "Memcli", "Manage memcli"},
 			{ActionDoctor, "Doctor", "Diagnose issues"},

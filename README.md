@@ -42,6 +42,7 @@ Typical flow: launch `dotai` → pick `Install` → choose Personal or Work → 
 | Screen | Description |
 |---|---|
 | `Install` | Runs the setup wizard: Profile → Skills → Memcli. |
+| `Update` | Re-applies the embedded templates to the components you already have installed. Skips anything that is not present. |
 | `Status` | Lists every dotai component and reports `OK` / `MISSING`. |
 | `Memcli` | Dedicated panel to install, uninstall or inspect the memcli integration. |
 | `Doctor` | Diagnoses global and per-project state, flags drift or broken hooks. |
@@ -138,7 +139,7 @@ dotai version
 dotai help
 ```
 
-After upgrading the binary, re-run `dotai` → **Install** to merge any new defaults (env vars, permissions, hooks) into your existing `~/.claude/settings.json` — the wizard is idempotent and only adds what is missing.
+After upgrading the binary, run `dotai` → **Update** to merge any new defaults (env vars, permissions, hooks) into the components you already have installed. Update never introduces new components — if you never installed memcli, Update won't add it; if you never picked a profile, your `CLAUDE.md` won't be touched.
 
 ## Testing
 
@@ -154,4 +155,4 @@ go vet ./... && go test -race ./...
 
 ## Status
 
-v0.2.2 — landing menu with Install, Status, Memcli and Doctor screens. Profile-driven installer, curated skills catalog and memcli living-docs integration. Provider layer abstracted around Claude Code with room for additional providers. Default `CLAUDE_CODE_NO_FLICKER=1` shipped via the install/upgrade flow.
+v0.3.0 — landing menu with Install, Update, Status, Memcli and Doctor screens. Profile-driven installer, curated skills catalog and memcli living-docs integration. The Update screen re-applies embedded templates only to components the user already has installed, so new defaults (like `CLAUDE_CODE_NO_FLICKER=1`) flow in without touching what was never installed. Provider layer abstracted around Claude Code with room for additional providers.
