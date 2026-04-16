@@ -1,0 +1,5 @@
+# Forzar LF en scripts shell y assets embebidos para evitar
+# fallos de ejecucion en Linux/WSL cuando se editan en Windows.
+*.sh        text eol=lf
+*.bash      text eol=lf
+internal/assets/files/**   text eol=lf
