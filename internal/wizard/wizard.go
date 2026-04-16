@@ -17,6 +17,12 @@ import (
 // adapter converts this message into a messages.PopScreenMsg.
 type WizardExitMsg struct{}
 
+// emitExit / emitBack produce the Cmds that the stepping/summary handlers use
+// to signal exit-to-caller and one-step-back. Defined once to avoid the same
+// closure literal at every call site.
+func emitExit() tea.Cmd { return func() tea.Msg { return WizardExitMsg{} } }
+func emitBack() tea.Cmd { return func() tea.Msg { return StepBackMsg{} } }
+
 // WizardModel is the root Bubbletea model for the dotai setup wizard.
 // It owns the step list, the current phase, and orchestrates transitions
 // between PhaseStepping → PhaseSummary → PhaseApplying → PhaseDone/PhaseError.
@@ -81,7 +87,7 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateApplying(msg)
 	case PhaseDone, PhaseError:
 		if _, ok := msg.(tea.KeyMsg); ok {
-			return m, func() tea.Msg { return WizardExitMsg{} }
+			return m, emitExit()
 		}
 	}
 	return m, nil
@@ -104,9 +110,9 @@ func (m WizardModel) updateStepping(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.stepIsCapturingKeys() {
 			switch typed.String() {
 			case "esc":
-				return m, func() tea.Msg { return WizardExitMsg{} }
+				return m, emitExit()
 			case "left":
-				return m, func() tea.Msg { return StepBackMsg{} }
+				return m, emitBack()
 			}
 		}
 	}
@@ -140,7 +146,7 @@ func (m WizardModel) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.phase = PhaseDone
 		return m, nil
 	case SummaryCancelMsg:
-		return m, func() tea.Msg { return WizardExitMsg{} }
+		return m, emitExit()
 	case tea.KeyMsg:
 		// left returns to the last step so the user can tweak their choices.
 		if typed.String() == "left" {
@@ -190,20 +196,26 @@ func (m WizardModel) advanceStep() (WizardModel, tea.Cmd) {
 //   - From PhaseStepping: go to the previous step; if already at the first
 //     step, emit WizardExitMsg so the adapter pops back to the caller.
 //   - From PhaseSummary: return to the last step so the user can edit it.
+//
+// Unlike advanceStep, retreatStep deliberately does NOT re-invoke Init() on
+// the target step: the step was already initialised on its first visit and
+// its accumulated state (cursor, selection, toggles) must survive the round
+// trip. Re-initialising would wipe user input and could trigger a StepAutoSkip
+// bounce for steps that skip themselves during Init.
 func (m WizardModel) retreatStep() (WizardModel, tea.Cmd) {
 	if m.phase == PhaseSummary {
 		m.phase = PhaseStepping
 		m.current = len(m.steps) - 1
 		m.steps[m.current].SetSize(m.width, m.height)
-		return m, m.steps[m.current].Init()
+		return m, nil
 	}
 
 	if m.current == 0 {
-		return m, func() tea.Msg { return WizardExitMsg{} }
+		return m, emitExit()
 	}
 	m.current--
 	m.steps[m.current].SetSize(m.width, m.height)
-	return m, m.steps[m.current].Init()
+	return m, nil
 }
 
 // View renders the current phase.
