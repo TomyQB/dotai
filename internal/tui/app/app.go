@@ -43,6 +43,21 @@ func New(prov provider.Provider, factories []StepFactory) Model {
 	}
 }
 
+// NewResumedUpdate returns a Model whose initial stack is [menu, update], with
+// the update screen pre-entered in "resumed" mode. This is used after the
+// binary relaunches itself post-`brew upgrade`, so the freshly-exec'd process
+// continues with the config-file re-apply phase without making the user
+// navigate there again.
+func NewResumedUpdate(prov provider.Provider, factories []StepFactory) Model {
+	m := Model{
+		stack:     []messages.Screen{menu.New()},
+		prov:      prov,
+		factories: factories,
+	}
+	m.push(updatescreen.NewResumed(prov))
+	return m
+}
+
 // Init satisfies tea.Model — delegates to the initial screen.
 func (m Model) Init() tea.Cmd {
 	return m.stack[0].Init()

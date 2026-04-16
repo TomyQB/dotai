@@ -16,6 +16,8 @@ import (
 )
 
 func main() {
+	resumedUpdate := false
+
 	// Handle --version/-v and --help/-h flags before touching the terminal.
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -30,6 +32,11 @@ func main() {
 			fmt.Println("  help       Print this help")
 			fmt.Println("\nRun with no arguments to launch the interactive menu.")
 			return
+		case "--resume-update":
+			// Internal flag set by the Update screen when it re-execs itself
+			// after `brew upgrade dotai`. Jumps directly into the file-apply
+			// phase with the freshly-installed binary's embedded assets.
+			resumedUpdate = true
 		}
 	}
 
@@ -54,7 +61,12 @@ func main() {
 		func() wizard.Step { return steps.NewMemcli(prov) },
 	}
 
-	root := app.New(prov, factories)
+	var root tea.Model
+	if resumedUpdate {
+		root = app.NewResumedUpdate(prov, factories)
+	} else {
+		root = app.New(prov, factories)
+	}
 	p := tea.NewProgram(root, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
