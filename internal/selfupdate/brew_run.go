@@ -45,6 +45,42 @@ func RunBrewUpgrade(onLine func(string)) RunResult {
 	}
 }
 
+// RunBrewInstall installs a tap-qualified formula, streaming output line by
+// line via onLine. Returns the exit error from brew (nil on success). Does
+// NOT run `brew update` first — callers that want a fresh index should call
+// RunBrewUpgrade's underlying step separately if needed.
+func RunBrewInstall(formula string, onLine func(string)) error {
+	if onLine != nil {
+		onLine("$ brew install " + formula)
+	}
+	return streamCmd(exec.Command("brew", "install", formula), onLine)
+}
+
+// RunBrewUninstall uninstalls a formula by bare name (no tap prefix needed),
+// streaming output via onLine.
+func RunBrewUninstall(formula string, onLine func(string)) error {
+	if onLine != nil {
+		onLine("$ brew uninstall " + formula)
+	}
+	return streamCmd(exec.Command("brew", "uninstall", formula), onLine)
+}
+
+// IsBrewFormulaInstalled reports whether a given formula name is present in
+// `brew list --formula`. Mirrors the detection used by Detect() for dotai
+// but for any formula name.
+func IsBrewFormulaInstalled(name string) bool {
+	out, err := exec.Command("brew", "list", "--formula", "-1").Output()
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) == name {
+			return true
+		}
+	}
+	return false
+}
+
 // brewReplacedDotai inspects the combined stdout+stderr of `brew upgrade dotai`
 // and decides whether the formula was actually reinstalled. Brew prints
 // "dotai X.Y.Z already installed" (no action) vs "==> Upgrading ... dotai" /
