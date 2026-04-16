@@ -82,7 +82,7 @@ func (m *ProfileModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case " ", "p":
 			m.enterPreview()
-		case "enter":
+		case "enter", "right":
 			m.confirmed = true
 			return m, func() tea.Msg { return wizard.StepCompleteMsg{} }
 		}
@@ -264,9 +264,15 @@ func (m *ProfileModel) Description() string {
 // Footer returns context-sensitive key-binding hints.
 func (m *ProfileModel) Footer() string {
 	if m.previewing {
-		return styles.Footer.Render("esc back • ↑/↓ scroll")
+		return styles.Footer.Render("esc close preview • ↑/↓ scroll")
 	}
-	return styles.Footer.Render("↑/↓ select • space preview • enter confirm")
+	return styles.Footer.Render("↑/↓ select • space preview • enter/→ confirm • esc/← menu")
+}
+
+// IsCapturingKeys reports whether the step is in its preview sub-mode, in which
+// case the wizard must not steal esc/left for its own global navigation.
+func (m *ProfileModel) IsCapturingKeys() bool {
+	return m.previewing
 }
 
 // SetSize notifies the step of the current terminal dimensions.

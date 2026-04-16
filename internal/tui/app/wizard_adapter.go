@@ -9,10 +9,9 @@ import (
 )
 
 // wizardScreen adapts wizard.WizardModel to the messages.Screen interface.
-// Its primary responsibility is intercepting terminal signals from the wizard
-// (tea.Quit on cancel, "any key" in PhaseDone/PhaseError) and converting them
-// into a PopScreenMsg so that the user returns to the menu instead of quitting
-// the entire program.
+// Its single responsibility is converting wizard.WizardExitMsg into a
+// messages.PopScreenMsg so the user always returns to the landing menu
+// instead of the whole program exiting.
 type wizardScreen struct {
 	wiz wizard.WizardModel
 }
@@ -34,36 +33,18 @@ func (w wizardScreen) Init() tea.Cmd {
 	return w.wiz.Init()
 }
 
-// Update satisfies tea.Model.
-//
-// Key interceptions (in order):
-//  1. Any key in PhaseDone or PhaseError: the wizard would normally call
-//     tea.Quit here; we intercept BEFORE forwarding so the app stays alive.
-//  2. After forwarding: tea.Quit emitted by the SummaryCancelMsg path is
-//     wrapped by interceptQuit and converted to a PopScreenMsg.
+// Update satisfies tea.Model. Any WizardExitMsg bubbling up from the wizard
+// (triggered by esc, left-at-first-step, summary cancel, or any-key after
+// done/error) is translated into a PopScreenMsg so the app stays alive.
 func (w wizardScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Intercept key presses in terminal phases before the wizard handles them.
-	// The wizard's own handler would return tea.Quit; we want PopScreenMsg.
-	if _, ok := msg.(tea.KeyMsg); ok {
-		phase := w.wiz.Phase()
-		if phase == wizard.PhaseDone || phase == wizard.PhaseError {
-			return w, func() tea.Msg { return messages.PopScreenMsg{} }
-		}
+	if _, ok := msg.(wizard.WizardExitMsg); ok {
+		return w, func() tea.Msg { return messages.PopScreenMsg{} }
 	}
 
-	// Forward to the inner wizard.
 	updated, cmd := w.wiz.Update(msg)
 	if wm, ok := updated.(wizard.WizardModel); ok {
 		w.wiz = wm
 	}
-
-	// If the user cancelled at the summary screen, let tea.Quit propagate
-	// so the program exits entirely (REQ-4.2). Only convert tea.Quit to
-	// PopScreenMsg for the done/error completion paths.
-	if !w.wiz.WasCancelled() {
-		cmd = interceptQuit(cmd)
-	}
-
 	return w, cmd
 }
 
@@ -79,19 +60,3 @@ func (w *wizardScreen) SetSize(_, _ int) {}
 // Footer satisfies an optional convention used by some screens.
 // The wizard manages its own footer inside its Frame rendering.
 func (w wizardScreen) Footer() string { return "" }
-
-// interceptQuit wraps a Cmd so that any tea.QuitMsg it produces is converted
-// into a PopScreenMsg. This prevents the wizard's cancel action from exiting
-// the entire program when it is embedded inside the app stack.
-func interceptQuit(cmd tea.Cmd) tea.Cmd {
-	if cmd == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		msg := cmd()
-		if _, ok := msg.(tea.QuitMsg); ok {
-			return messages.PopScreenMsg{}
-		}
-		return msg
-	}
-}

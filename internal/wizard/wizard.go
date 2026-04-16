@@ -12,6 +12,11 @@ import (
 	"github.com/TomyQB/dotai/internal/tui/styles"
 )
 
+// WizardExitMsg is emitted when the user wants to leave the wizard entirely
+// and return to the calling screen (typically the landing menu). The wizard
+// adapter converts this message into a messages.PopScreenMsg.
+type WizardExitMsg struct{}
+
 // WizardModel is the root Bubbletea model for the dotai setup wizard.
 // It owns the step list, the current phase, and orchestrates transitions
 // between PhaseStepping → PhaseSummary → PhaseApplying → PhaseDone/PhaseError.
@@ -26,7 +31,6 @@ type WizardModel struct {
 	summary  SummaryModel
 	executor *Executor
 	err      error
-	cancelled bool
 }
 
 // New constructs a WizardModel for the given provider and pre-built step list.
@@ -77,7 +81,7 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateApplying(msg)
 	case PhaseDone, PhaseError:
 		if _, ok := msg.(tea.KeyMsg); ok {
-			return m, tea.Quit
+			return m, func() tea.Msg { return WizardExitMsg{} }
 		}
 	}
 	return m, nil
@@ -85,12 +89,26 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // updateStepping handles messages while in the stepping phase.
 func (m WizardModel) updateStepping(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+	switch typed := msg.(type) {
 	case StepCompleteMsg:
 		m.steps[m.current].Apply(m.state)
 		return m.advanceStep()
 	case StepAutoSkipMsg:
 		return m.advanceStep()
+	case StepBackMsg:
+		return m.retreatStep()
+	case tea.KeyMsg:
+		// Global navigation: esc exits to the caller, left goes back one step.
+		// Skipped when the current step is in a sub-mode that consumes these
+		// keys itself (e.g. profile preview viewport).
+		if !m.stepIsCapturingKeys() {
+			switch typed.String() {
+			case "esc":
+				return m, func() tea.Msg { return WizardExitMsg{} }
+			case "left":
+				return m, func() tea.Msg { return StepBackMsg{} }
+			}
+		}
 	}
 
 	// Forward all other messages to the active step.
@@ -101,9 +119,19 @@ func (m WizardModel) updateStepping(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// stepIsCapturingKeys reports whether the current step has signalled, via the
+// optional KeyCapturing interface, that it is in a sub-mode that must receive
+// esc and left directly without wizard-level interception.
+func (m WizardModel) stepIsCapturingKeys() bool {
+	if kc, ok := m.steps[m.current].(KeyCapturing); ok {
+		return kc.IsCapturingKeys()
+	}
+	return false
+}
+
 // updateSummary handles messages while in the summary phase.
 func (m WizardModel) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+	switch typed := msg.(type) {
 	case SummaryConfirmMsg:
 		if m.state.HasChanges() {
 			m.phase = PhaseApplying
@@ -112,8 +140,12 @@ func (m WizardModel) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.phase = PhaseDone
 		return m, nil
 	case SummaryCancelMsg:
-		m.cancelled = true
-		return m, tea.Quit
+		return m, func() tea.Msg { return WizardExitMsg{} }
+	case tea.KeyMsg:
+		// left returns to the last step so the user can tweak their choices.
+		if typed.String() == "left" {
+			return m.retreatStep()
+		}
 	}
 
 	updated, cmd := m.summary.Update(msg)
@@ -153,6 +185,27 @@ func (m WizardModel) advanceStep() (WizardModel, tea.Cmd) {
 	return m, m.steps[m.current].Init()
 }
 
+// retreatStep moves one position back in the step list, preserving whatever
+// selection the previous step already holds. Behaviour by source phase:
+//   - From PhaseStepping: go to the previous step; if already at the first
+//     step, emit WizardExitMsg so the adapter pops back to the caller.
+//   - From PhaseSummary: return to the last step so the user can edit it.
+func (m WizardModel) retreatStep() (WizardModel, tea.Cmd) {
+	if m.phase == PhaseSummary {
+		m.phase = PhaseStepping
+		m.current = len(m.steps) - 1
+		m.steps[m.current].SetSize(m.width, m.height)
+		return m, m.steps[m.current].Init()
+	}
+
+	if m.current == 0 {
+		return m, func() tea.Msg { return WizardExitMsg{} }
+	}
+	m.current--
+	m.steps[m.current].SetSize(m.width, m.height)
+	return m, m.steps[m.current].Init()
+}
+
 // View renders the current phase.
 func (m WizardModel) View() string {
 	switch m.phase {
@@ -168,7 +221,7 @@ func (m WizardModel) View() string {
 		return styles.Frame(
 			m.summaryHeader(),
 			m.summary.View(),
-			styles.FooterHints("enter", "apply", "esc", "cancel"),
+			styles.FooterHints("enter", "apply", "←", "back", "esc", "menu"),
 			m.width,
 			m.height,
 		)
@@ -250,10 +303,5 @@ func (m WizardModel) errorView() string {
 // Phase returns the current phase of the wizard.
 func (m WizardModel) Phase() Phase {
 	return m.phase
-}
-
-// WasCancelled reports whether the user cancelled the wizard.
-func (m WizardModel) WasCancelled() bool {
-	return m.cancelled
 }
 

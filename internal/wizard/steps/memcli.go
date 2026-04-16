@@ -43,9 +43,9 @@ func (m *MemcliModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "left", "h":
+		case "up", "k":
 			m.cursor = memcliYes
-		case "right", "l":
+		case "down", "j":
 			m.cursor = memcliNo
 		case "tab":
 			if m.cursor == memcliYes {
@@ -53,7 +53,7 @@ func (m *MemcliModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.cursor = memcliYes
 			}
-		case "enter", " ":
+		case "enter", "right", " ":
 			m.confirmed = true
 			return m, func() tea.Msg { return wizard.StepCompleteMsg{} }
 		}
@@ -84,8 +84,8 @@ func (m *MemcliModel) View() string {
 		noStr = fmt.Sprintf("%s %s", styles.Arrow.Render("▸"), styles.MenuItemSelected.Render("No"))
 	}
 
-	b.WriteString(yesStr + "   " + noStr)
-	b.WriteString("\n")
+	b.WriteString(yesStr + "\n")
+	b.WriteString(noStr + "\n")
 
 	return b.String()
 }
@@ -132,7 +132,7 @@ func (m *MemcliModel) Description() string { return "Session memory skills, agen
 
 // Footer returns key-binding hints for this step.
 func (m *MemcliModel) Footer() string {
-	return styles.Footer.Render("←/→ select • enter confirm")
+	return styles.Footer.Render("↑/↓ select • enter/→ confirm • ← back • esc menu")
 }
 
 // SetSize notifies the step of the current terminal dimensions.

@@ -29,23 +29,53 @@ func TestWizardNew(t *testing.T) {
 
 	m := wizard.New(prov, stepList)
 
-	// The wizard must not report cancelled immediately after construction.
-	if m.WasCancelled() {
-		t.Error("WasCancelled() = true right after New(), want false")
+	if m.Phase() != wizard.PhaseStepping {
+		t.Errorf("Phase() = %v right after New(), want PhaseStepping", m.Phase())
 	}
 
 	// Calling View() before Init should not panic; it simply renders step 0.
 	_ = m.View()
 }
 
-// TestWizardWasCancelledDefault confirms the cancelled flag is false on a
-// freshly-created model.
-func TestWizardWasCancelledDefault(t *testing.T) {
+// TestWizardEscEmitsExit verifies that esc in PhaseStepping produces a
+// WizardExitMsg, letting the adapter pop back to the caller instead of
+// tearing down the program.
+func TestWizardEscEmitsExit(t *testing.T) {
 	prov := provider.NewTestProvider(t.TempDir())
 	m := wizard.New(prov, buildStepList(prov))
 
-	if m.WasCancelled() {
-		t.Error("WasCancelled() = true by default, want false")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd == nil {
+		t.Fatal("Update(esc) returned nil Cmd, want WizardExitMsg")
+	}
+	if _, ok := cmd().(wizard.WizardExitMsg); !ok {
+		t.Errorf("Update(esc) emitted %T, want wizard.WizardExitMsg", cmd())
+	}
+}
+
+// TestWizardLeftAtFirstStepExits verifies that left arrow on the first step
+// triggers WizardExitMsg (no earlier step to retreat to).
+func TestWizardLeftAtFirstStepExits(t *testing.T) {
+	prov := provider.NewTestProvider(t.TempDir())
+	m := wizard.New(prov, buildStepList(prov))
+
+	// First left emits StepBackMsg.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if cmd == nil {
+		t.Fatal("Update(left) returned nil Cmd, want StepBackMsg")
+	}
+	backMsg, ok := cmd().(wizard.StepBackMsg)
+	if !ok {
+		t.Fatalf("Update(left) emitted %T, want wizard.StepBackMsg", cmd())
+	}
+
+	// Feeding StepBackMsg while on step 0 must bubble up as WizardExitMsg.
+	_, cmd2 := m.Update(backMsg)
+	if cmd2 == nil {
+		t.Fatal("Update(StepBackMsg) at step 0 returned nil Cmd, want WizardExitMsg")
+	}
+	if _, ok := cmd2().(wizard.WizardExitMsg); !ok {
+		t.Errorf("Update(StepBackMsg) at step 0 emitted %T, want wizard.WizardExitMsg", cmd2())
 	}
 }
 

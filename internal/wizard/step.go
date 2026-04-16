@@ -48,3 +48,17 @@ type StepCompleteMsg struct{}
 // support the feature the step requires. WizardModel skips the step and records
 // it as skipped without rendering it.
 type StepAutoSkipMsg struct{}
+
+// StepBackMsg is emitted when the user wants to return to the previous step.
+// WizardModel retreats one position upon receiving it; if the current step is
+// already the first one, it converts the message to a WizardExitMsg instead.
+type StepBackMsg struct{}
+
+// KeyCapturing is an optional interface a Step can implement to signal that it
+// is currently in a sub-mode that consumes global navigation keys (esc, left).
+// When IsCapturingKeys returns true, the wizard forwards all keys to the step
+// without intercepting esc/left for its own back/exit handling. Used for modal
+// states like the profile preview viewport.
+type KeyCapturing interface {
+	IsCapturingKeys() bool
+}

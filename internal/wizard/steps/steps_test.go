@@ -303,9 +303,9 @@ func TestMemcliApplyWhenConfirmedNo(t *testing.T) {
 	prov := newTestProvider(t)
 	s := steps.NewMemcli(prov)
 
-	// Move cursor right to No, then confirm.
-	afterRight := pressKey(s, "l")
-	updated := pressSpecialKey(afterRight, tea.KeyEnter)
+	// Move cursor down to No, then confirm.
+	afterDown := pressKey(s, "j")
+	updated := pressSpecialKey(afterDown, tea.KeyEnter)
 	confirmed := updated.(*steps.MemcliModel)
 
 	state := &wizard.WizardState{}

@@ -112,7 +112,7 @@ func (m *SkillsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.confirmed = true
 			return m, func() tea.Msg { return wizard.StepCompleteMsg{} }
-		case "enter", "y":
+		case "enter", "y", "right":
 			m.confirmed = true
 			return m, func() tea.Msg { return wizard.StepCompleteMsg{} }
 		}
@@ -220,7 +220,7 @@ func (m *SkillsModel) Description() string { return "AI coding skills to install
 
 // Footer returns key-binding hints for this step.
 func (m *SkillsModel) Footer() string {
-	return styles.Footer.Render("↑/↓ move • space toggle • a all • n none • enter confirm")
+	return styles.Footer.Render("↑/↓ move • space toggle • a all • n none • enter/→ confirm • ← back • esc menu")
 }
 
 // SetSize notifies the step of the current terminal dimensions.
