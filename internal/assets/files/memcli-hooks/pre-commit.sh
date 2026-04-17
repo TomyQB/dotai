@@ -1,31 +1,43 @@
 #!/usr/bin/env bash
 # mem-cli git pre-commit hook
 # Blocks the commit if .agent-memory/.stale is non-empty.
-# Tells the user to run /memcli-update inside Claude Code.
+# .stale has two kinds of entries:
+#   path/to/doc.md          — existing doc to regenerate
+#   [NEW] path/to/source    — orphaned source needing a brand-new doc
+# Tells the user to run /memcli-update inside Claude Code to handle both.
 
 set -e
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 STALE_FILE="$REPO_ROOT/.agent-memory/.stale"
 
-if [ ! -f "$STALE_FILE" ]; then
-  exit 0
-fi
+[ -f "$STALE_FILE" ] || exit 0
 
-# count non-empty lines
-COUNT=$(sed '/^$/d' "$STALE_FILE" | wc -l | tr -d ' ')
+ENTRIES="$(sed '/^$/d' "$STALE_FILE")"
+[ -z "$ENTRIES" ] && exit 0
 
-if [ "$COUNT" = "0" ]; then
-  exit 0
-fi
+STALE_LINES="$(printf '%s\n' "$ENTRIES" | grep -v '^\[NEW\] \S' || true)"
+NEW_LINES="$(printf '%s\n' "$ENTRIES"   | grep    '^\[NEW\] \S' || true)"
+
+STALE_COUNT="$([ -z "$STALE_LINES" ] && echo 0 || printf '%s\n' "$STALE_LINES" | wc -l | tr -d ' ')"
+NEW_COUNT="$(  [ -z "$NEW_LINES"   ] && echo 0 || printf '%s\n' "$NEW_LINES"   | wc -l | tr -d ' ')"
 
 echo ""
 echo "✗ mem-cli: commit blocked — agent memory is stale"
 echo ""
-echo "The following docs must be regenerated before committing:"
-echo ""
-sed '/^$/d' "$STALE_FILE" | sed 's/^/  - /'
-echo ""
+
+if [ "$STALE_COUNT" -gt 0 ]; then
+  echo "Docs to regenerate ($STALE_COUNT):"
+  printf '%s\n' "$STALE_LINES" | sed 's/^/  - /'
+  echo ""
+fi
+
+if [ "$NEW_COUNT" -gt 0 ]; then
+  echo "New source paths without a doc ($NEW_COUNT):"
+  printf '%s\n' "$NEW_LINES" | sed 's/^\[NEW\] /  - /'
+  echo ""
+fi
+
 echo "→ Open Claude Code in this repo and run:  /memcli-update"
 echo ""
 exit 1
