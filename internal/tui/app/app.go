@@ -77,9 +77,20 @@ func NewResumedUpdate(prov provider.Provider, factories []StepFactory) Model {
 	return m
 }
 
-// Init satisfies tea.Model — delegates to the initial screen.
+// Init satisfies tea.Model. It batches Init() across every screen in the
+// initial stack so constructors that pre-push a second screen (notably
+// NewResumedUpdate, whose stack is [menu, update]) get that screen's async
+// work kicked off too. Without this, the pre-pushed screen never fires its
+// first Cmd and sits idle — e.g. the resumed-update flow hung at phaseLoading
+// because updatescreen.Init's detection goroutines were never started.
 func (m Model) Init() tea.Cmd {
-	return m.stack[0].Init()
+	cmds := make([]tea.Cmd, 0, len(m.stack))
+	for _, s := range m.stack {
+		if c := s.Init(); c != nil {
+			cmds = append(cmds, c)
+		}
+	}
+	return tea.Batch(cmds...)
 }
 
 // Update handles global messages first, then routes to the top screen.

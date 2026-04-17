@@ -40,6 +40,24 @@ func TestAppInit(t *testing.T) {
 	_ = m.Init()
 }
 
+// TestResumedUpdateInitFiresPushedScreen guards against the regression where
+// NewResumedUpdate's pre-pushed update screen sat at phaseLoading forever
+// because app.Init only called stack[0].Init(). With the fix, Init batches
+// across the whole stack, so a resumed launch returns a non-nil Cmd (the
+// update screen's detection goroutines).
+func TestResumedUpdateInitFiresPushedScreen(t *testing.T) {
+	prov := provider.NewTestProvider(t.TempDir())
+	factories := []app.StepFactory{
+		func() wizard.Step { return steps.NewProfile(prov) },
+		func() wizard.Step { return steps.NewSkills(prov) },
+		func() wizard.Step { return steps.NewMemcli(prov) },
+	}
+	m := app.NewResumedUpdate(prov, factories)
+	if cmd := m.Init(); cmd == nil {
+		t.Fatal("NewResumedUpdate.Init() returned nil — update screen's detection never fires")
+	}
+}
+
 // TestWizardAdapterTitle verifies that pushing the install screen results in
 // the wizard adapter returning title "install". We navigate to it via the
 // menu SelectedMsg.
