@@ -86,15 +86,22 @@ func (m *PreviewModel) SetSize(w, h int) {
 	m.ensureViewport()
 }
 
-// View renders the preview in a compact frame with scroll/back footer.
+// View renders the preview inside a full-terminal frame so the markdown
+// content gets the whole width. The projects list and browser still use
+// FrameCompact because reading is the only screen where extra horizontal
+// real estate actually helps.
 func (m PreviewModel) View() string {
-	header := banner.RenderCompact(styles.CompactInnerWidth, filepath.Base(m.path))
+	innerW := m.width - 6
+	if innerW < 10 {
+		innerW = 10
+	}
+	header := banner.RenderCompact(innerW, filepath.Base(m.path))
 	body := m.vp.View()
 	footer := styles.FooterHints(
 		"↑/↓", "scroll",
 		"esc/←", "back",
 	)
-	return styles.FrameCompact(header, body, footer, styles.CompactWidth)
+	return styles.Frame(header, body, footer, m.width, m.height)
 }
 
 // readBody loads the file contents. On error it returns a human-readable
