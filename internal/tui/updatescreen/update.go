@@ -8,6 +8,7 @@ package updatescreen
 
 import (
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -105,16 +106,44 @@ func NewResumed(prov provider.Provider) Model {
 func (m Model) Title() string { return "update" }
 
 // Init triggers an async detection pass that feeds the preview list and the
-// brew availability.
+// brew availability. Detection runs with a hard ceiling: if anything in the
+// detect pipeline is slow (a hung brew tap lock, a stat against an NFS
+// mount, etc.) the screen falls back to sensible defaults after initCeiling
+// so the user never sees an indefinite "Detecting..." spinner.
 func (m Model) Init() tea.Cmd {
 	prov := m.prov
 	return func() tea.Msg {
-		return planMsg{
-			preview: buildPreview(prov),
-			brew:    selfupdate.Detect(),
+		type previewResult struct {
+			rows []previewRow
 		}
+		type brewResult struct {
+			avail selfupdate.Availability
+		}
+		previewCh := make(chan previewResult, 1)
+		brewCh := make(chan brewResult, 1)
+
+		go func() { previewCh <- previewResult{rows: buildPreview(prov)} }()
+		go func() { brewCh <- brewResult{avail: selfupdate.Detect()} }()
+
+		out := planMsg{}
+		deadline := time.After(initCeiling)
+		for i := 0; i < 2; i++ {
+			select {
+			case r := <-previewCh:
+				out.preview = r.rows
+			case r := <-brewCh:
+				out.brew = r.avail
+			case <-deadline:
+				return out
+			}
+		}
+		return out
 	}
 }
+
+// initCeiling is the hard upper bound on how long Init waits for detection
+// to finish before rendering the plan with whatever partial data it has.
+const initCeiling = 8 * time.Second
 
 // Update handles messages and key events.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -179,10 +208,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleKey routes keyboard input based on the current phase. Input is
-// ignored while busy phases (brew / files) are running.
+// handleKey routes keyboard input based on the current phase. During
+// phaseLoading the user can still esc out — detection can take longer than
+// expected on slow brew mirrors and the screen must not trap them.
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.phase == phaseBrew || m.phase == phaseFiles || m.phase == phaseLoading {
+	if m.phase == phaseLoading {
+		if s := msg.String(); s == "esc" || s == "q" {
+			return m, popScreen()
+		}
+		return m, nil
+	}
+	if m.phase == phaseBrew || m.phase == phaseFiles {
 		return m, nil
 	}
 
@@ -275,7 +311,10 @@ func (m Model) View() string {
 
 // Footer returns the key-hint line for this screen.
 func (m Model) Footer() string {
-	if m.phase == phaseBrew || m.phase == phaseFiles || m.phase == phaseLoading {
+	if m.phase == phaseLoading {
+		return styles.FooterHints("esc", "cancel")
+	}
+	if m.phase == phaseBrew || m.phase == phaseFiles {
 		return styles.FooterHints("please wait...", "")
 	}
 	return styles.FooterHints("↑/↓", "navigate", "enter", "select", "esc", "back")

@@ -20,8 +20,9 @@ import (
 // HOMEBREW_AUTO_UPDATE it can trigger a background `brew update` that takes
 // minutes, and if another brew is running the list blocks on the tap lock.
 // Either way the UI must not hang — we fall back to "not managed" after
-// detectTimeout and let the user retry.
-const detectTimeout = 5 * time.Second
+// detectTimeout and let the user retry. Kept tight (3 s) because the
+// calling screen shows a spinner during the wait.
+const detectTimeout = 3 * time.Second
 
 // Availability describes whether a brew-based self-update is viable on this
 // machine right now. All fields are false on Windows and on Linux systems
