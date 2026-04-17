@@ -70,9 +70,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// Broadcast dimensions to every screen so none renders stale sizes.
-		for _, s := range m.stack {
-			broadcastSize(s, m.width, m.height)
+		// Forward to every screen via Update. broadcastSize cannot reach
+		// pointer-receiver SetSize methods when the interface contains a
+		// value (every New* returns by value), whereas Update is part of
+		// tea.Model itself and resolves pointer receivers transparently.
+		for i, s := range m.stack {
+			updated, _ := s.Update(msg)
+			if sc, ok := updated.(messages.Screen); ok {
+				m.stack[i] = sc
+			}
 		}
 		return m, nil
 
@@ -89,8 +95,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case messages.PushScreenMsg:
-		m.push(msg.Screen)
-		return m, msg.Screen.Init()
+		m.stack = append(m.stack, msg.Screen)
+		m.deliverSize()
+		return m, m.top().Init()
 
 	case menu.SelectedMsg:
 		return m.handleMenuAction(msg.Action)
@@ -114,10 +121,26 @@ func (m Model) top() messages.Screen {
 	return m.stack[len(m.stack)-1]
 }
 
-// push appends a screen to the stack and sets its current dimensions.
+// push appends a screen to the stack and delivers the current window size.
 func (m *Model) push(s messages.Screen) {
 	m.stack = append(m.stack, s)
-	broadcastSize(s, m.width, m.height)
+	m.deliverSize()
+}
+
+// deliverSize hands the current window dimensions to the top-of-stack screen
+// via a tea.WindowSizeMsg. Used right after every push so freshly-appended
+// screens receive sizing immediately (Bubbletea does not re-emit
+// WindowSizeMsg after the initial one). Update is the only channel that
+// reaches pointer-receiver handlers when Screen holds a value.
+func (m *Model) deliverSize() {
+	if m.width <= 0 {
+		return
+	}
+	sz := tea.WindowSizeMsg{Width: m.width, Height: m.height}
+	updated, _ := m.top().Update(sz)
+	if sc, ok := updated.(messages.Screen); ok {
+		m.stack[len(m.stack)-1] = sc
+	}
 }
 
 // handleMenuAction dispatches a menu selection to the appropriate screen.
@@ -159,14 +182,3 @@ func (m Model) handleMenuAction(action menu.Action) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// broadcastSize calls SetSize on a screen if it exposes that method.
-// SetSize is not part of the messages.Screen interface — we use a local
-// interface assertion to avoid coupling the interface to sizing concerns.
-func broadcastSize(s messages.Screen, w, h int) {
-	type sizer interface {
-		SetSize(w, h int)
-	}
-	if sz, ok := s.(sizer); ok {
-		sz.SetSize(w, h)
-	}
-}

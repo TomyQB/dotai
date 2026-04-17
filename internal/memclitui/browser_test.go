@@ -3,6 +3,7 @@ package memclitui_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -130,5 +131,35 @@ func TestBrowserEscAlwaysPops(t *testing.T) {
 	}
 	if _, ok := cmd().(memclitui.PopScreenMsg); !ok {
 		t.Errorf("esc emitted %T, want memclitui.PopScreenMsg", cmd())
+	}
+}
+
+// TestPushDeliversWindowSize guards the v0.3.6 regression where a screen
+// pushed mid-session came up with zero dimensions (the Preview model sized
+// its viewport as 10x3 and showed nothing useful). Pushing a preview after
+// a WindowSizeMsg has already configured the root must leave the top
+// screen's View output non-empty.
+func TestPushDeliversWindowSize(t *testing.T) {
+	e := setupProject(t)
+	mdPath := filepath.Join(e.Path, ".agent-memory", "root.md")
+
+	app := memclitui.New(&registry.Registry{Version: registry.SchemaVersion})
+	// Prime the root with a terminal size, mimicking Bubbletea's initial msg.
+	appModel, _ := app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app = appModel.(memclitui.Model)
+
+	// Push a preview screen — the root must propagate the size so the
+	// viewport inside Preview gets configured on first render.
+	appModel, _ = app.Update(memclitui.PushScreenMsg{Screen: memclitui.NewPreview(mdPath)})
+	app = appModel.(memclitui.Model)
+
+	view := app.View()
+	if view == "" {
+		t.Fatal("View() after push returned empty string — size was not delivered")
+	}
+	// The body is loaded at NewPreview, so the file content must appear in
+	// the rendered viewport once width/height are > 0.
+	if !strings.Contains(view, "# root") {
+		t.Errorf("View() does not contain the preview body; size delivery regressed")
 	}
 }
