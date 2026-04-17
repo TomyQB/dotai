@@ -287,16 +287,32 @@ func TestMemcliApplyWhenConfirmedYes(t *testing.T) {
 	if !state.MemcliEnabled {
 		t.Error("MemcliEnabled = false after confirming Yes, want true")
 	}
-	if len(state.Patch.Hooks) == 0 {
-		t.Fatal("Patch.Hooks is empty after memcli Apply, want Stop hook")
+	// Step must populate Patch.Hooks with the two memcli hooks so the
+	// executor's generic merge loop handles them like any other hook.
+	if len(state.Patch.Hooks) != 2 {
+		t.Fatalf("Patch.Hooks has %d entries, want 2 (Stop + SessionStart)", len(state.Patch.Hooks))
 	}
-	hook := state.Patch.Hooks[0]
-	if hook.Event != "Stop" {
-		t.Errorf("hook.Event = %q, want Stop", hook.Event)
+	events := []string{state.Patch.Hooks[0].Event, state.Patch.Hooks[1].Event}
+	if !contains(events, "Stop") {
+		t.Errorf("Patch.Hooks events = %v, want Stop to be one of them", events)
 	}
-	if !strings.Contains(hook.Command, "stop-hook.sh") {
-		t.Errorf("hook.Command = %q, want it to contain stop-hook.sh", hook.Command)
+	if !contains(events, "SessionStart") {
+		t.Errorf("Patch.Hooks events = %v, want SessionStart to be one of them", events)
 	}
+	for _, h := range state.Patch.Hooks {
+		if !strings.Contains(h.Command, "stop-hook.sh") && !strings.Contains(h.Command, "session-start-hook.sh") {
+			t.Errorf("hook.Command = %q, want reference to a known memcli hook script", h.Command)
+		}
+	}
+}
+
+func contains(haystack []string, needle string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
+		}
+	}
+	return false
 }
 
 func TestMemcliApplyWhenConfirmedNo(t *testing.T) {

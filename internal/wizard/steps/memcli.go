@@ -102,13 +102,17 @@ func (m *MemcliModel) Apply(state *wizard.WizardState) {
 	if err != nil {
 		configDir = "~/.claude"
 	}
-
-	stopHookCmd := "bash " + configDir + "/" + m.prov.ToolDir() + "/hooks/stop-hook.sh"
-	state.Patch.Hooks = append(state.Patch.Hooks, wizard.HookEntry{
-		Event:   "Stop",
-		Matcher: "",
-		Command: stopHookCmd,
-	})
+	hooksPath := configDir + "/" + m.prov.ToolDir() + "/hooks/"
+	state.Patch.Hooks = append(state.Patch.Hooks,
+		wizard.HookEntry{
+			Event:   "Stop",
+			Command: "bash " + hooksPath + wizard.MemcliStopHookScript,
+		},
+		wizard.HookEntry{
+			Event:   "SessionStart",
+			Command: "bash " + hooksPath + wizard.MemcliSessionStartHookScript,
+		},
+	)
 }
 
 // SummaryLine returns a human-readable one-liner for the summary screen.

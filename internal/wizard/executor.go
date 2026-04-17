@@ -14,6 +14,14 @@ import (
 	"github.com/TomyQB/dotai/internal/provider"
 )
 
+// Basenames of the memcli hook scripts. Collected here so renames flow to
+// both the install/uninstall side (dedup substring, file removal list) and
+// the wizard step that builds HookEntry commands.
+const (
+	MemcliStopHookScript         = "stop-hook.sh"
+	MemcliSessionStartHookScript = "session-start-hook.sh"
+)
+
 // ProgressMsg is emitted by the Executor to report progress or completion.
 type ProgressMsg struct {
 	// Message is a human-readable status line.
@@ -229,9 +237,10 @@ func (e *Executor) mergeAndWriteSettings(state *WizardState) error {
 		}
 	}
 
-	// Merge hook entries.
-	for _, hook := range state.Patch.Hooks {
-		// Ensure existing["hooks"] is a map[string]any.
+	// Merge every hook entry through the same helper — dedup key is the
+	// script basename extracted from the command, which matches how
+	// InstallMemcli registers its own entries outside the wizard path.
+	if len(state.Patch.Hooks) > 0 {
 		var hooksMap map[string]any
 		if raw, ok := existing["hooks"]; ok {
 			hooksMap, _ = raw.(map[string]any)
@@ -239,40 +248,14 @@ func (e *Executor) mergeAndWriteSettings(state *WizardState) error {
 		if hooksMap == nil {
 			hooksMap = make(map[string]any)
 		}
-
-		// Get or create the event array.
-		var eventSlice []any
-		if raw, ok := hooksMap[hook.Event]; ok {
-			eventSlice, _ = raw.([]any)
+		for _, hook := range state.Patch.Hooks {
+			installHookEntry(hooksMap, hookRegistration{
+				Event:       hook.Event,
+				Command:     hook.Command,
+				Matcher:     hook.Matcher,
+				MatchSubstr: filepath.Base(hook.Command),
+			})
 		}
-		if eventSlice == nil {
-			eventSlice = []any{}
-		}
-
-		// Filter out stale entries for the same script (dedup).
-		// Extract the script basename from the hook command for matching.
-		scriptBase := filepath.Base(hook.Command)
-		filtered := make([]any, 0, len(eventSlice))
-		for _, item := range eventSlice {
-			if !hookCommandContains(item, scriptBase) {
-				filtered = append(filtered, item)
-			}
-		}
-
-		// Build new entry.
-		newEntry := map[string]any{
-			"hooks": []any{
-				map[string]any{
-					"type":    "command",
-					"command": hook.Command,
-				},
-			},
-		}
-		if hook.Matcher != "" {
-			newEntry["matcher"] = hook.Matcher
-		}
-
-		hooksMap[hook.Event] = append(filtered, newEntry)
 		existing["hooks"] = hooksMap
 	}
 
@@ -446,8 +429,7 @@ func InstallMemcli(prov provider.Provider) error {
 		existing = make(map[string]any)
 	}
 
-	stopHookCmd := "bash " + configDir + "/" + prov.ToolDir() + "/hooks/stop-hook.sh"
-	stopHook := HookEntry{Event: "Stop", Command: stopHookCmd}
+	hooksPath := configDir + "/" + prov.ToolDir() + "/hooks/"
 
 	var hooksMap map[string]any
 	if raw, ok := existing["hooks"]; ok {
@@ -457,34 +439,95 @@ func InstallMemcli(prov provider.Provider) error {
 		hooksMap = make(map[string]any)
 	}
 
+	for _, reg := range memcliHookRegistrations(hooksPath) {
+		installHookEntry(hooksMap, reg)
+	}
+	existing["hooks"] = hooksMap
+
+	return prov.WriteSettings(existing)
+}
+
+// memcliHookRegistrations returns the two hook entries that InstallMemcli
+// registers in settings.json. Kept in one place so the wizard step and the
+// Panel path write identical entries.
+func memcliHookRegistrations(hooksPath string) []hookRegistration {
+	return []hookRegistration{
+		{
+			Event:       "Stop",
+			Command:     "bash " + hooksPath + MemcliStopHookScript,
+			MatchSubstr: MemcliStopHookScript,
+		},
+		{
+			Event:       "SessionStart",
+			Command:     "bash " + hooksPath + MemcliSessionStartHookScript,
+			MatchSubstr: MemcliSessionStartHookScript,
+		},
+	}
+}
+
+// hookRegistration bundles everything needed to write one hook entry into
+// settings.json: the event name, the command to run, an optional tool
+// matcher (for PreToolUse), and the substring used to locate and remove
+// prior versions of the same hook on reinstall.
+type hookRegistration struct {
+	Event       string
+	Command     string
+	Matcher     string
+	MatchSubstr string
+}
+
+// installHookEntry adds reg under hooksMap[reg.Event], first removing any
+// pre-existing entry whose command contains reg.MatchSubstr so the operation
+// is idempotent across repeated Install runs.
+func installHookEntry(hooksMap map[string]any, reg hookRegistration) {
 	var eventSlice []any
-	if raw, ok := hooksMap[stopHook.Event]; ok {
+	if raw, ok := hooksMap[reg.Event]; ok {
 		eventSlice, _ = raw.([]any)
 	}
-	if eventSlice == nil {
-		eventSlice = []any{}
-	}
 
-	// Deduplicate existing stop-hook entries.
 	filtered := make([]any, 0, len(eventSlice))
 	for _, item := range eventSlice {
-		if !hookCommandContains(item, "stop-hook.sh") {
+		if !hookCommandContains(item, reg.MatchSubstr) {
 			filtered = append(filtered, item)
 		}
 	}
 
-	newEntry := map[string]any{
+	entry := map[string]any{
 		"hooks": []any{
 			map[string]any{
 				"type":    "command",
-				"command": stopHookCmd,
+				"command": reg.Command,
 			},
 		},
 	}
-	hooksMap[stopHook.Event] = append(filtered, newEntry)
-	existing["hooks"] = hooksMap
+	if reg.Matcher != "" {
+		entry["matcher"] = reg.Matcher
+	}
+	hooksMap[reg.Event] = append(filtered, entry)
+}
 
-	return prov.WriteSettings(existing)
+// uninstallHookEntry removes every command-hook entry under hooksMap[event]
+// whose command contains matchSubstr. If the event slice becomes empty the
+// event key itself is dropped from hooksMap.
+func uninstallHookEntry(hooksMap map[string]any, event, matchSubstr string) {
+	var eventSlice []any
+	if raw, ok := hooksMap[event]; ok {
+		eventSlice, _ = raw.([]any)
+	}
+	if len(eventSlice) == 0 {
+		return
+	}
+	filtered := make([]any, 0, len(eventSlice))
+	for _, item := range eventSlice {
+		if !hookCommandContains(item, matchSubstr) {
+			filtered = append(filtered, item)
+		}
+	}
+	if len(filtered) == 0 {
+		delete(hooksMap, event)
+	} else {
+		hooksMap[event] = filtered
+	}
 }
 
 // UninstallMemcli removes memcli components from the provider configuration.
@@ -494,16 +537,24 @@ func UninstallMemcli(prov provider.Provider) error {
 		return err
 	}
 
-	// Files to remove (ignore not-exist errors).
-	filesToRemove := []string{
-		filepath.Join(configDir, prov.ToolDir(), "hooks", "pre-commit.sh"),
-		filepath.Join(configDir, prov.ToolDir(), "hooks", "stop-hook.sh"),
-		filepath.Join(configDir, prov.AgentsDir(), "doc-keeper.md"),
+	// Remove every file shipped under files/memcli-hooks/ from the installed
+	// hooks directory. Deriving the list from the asset tree means new hook
+	// files auto-clean up on uninstall without touching this function.
+	hooksDst := filepath.Join(configDir, prov.ToolDir(), "hooks")
+	hookEntries, err := assets.FS.ReadDir("files/memcli-hooks")
+	if err != nil {
+		return err
 	}
-	for _, f := range filesToRemove {
-		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+	for _, entry := range hookEntries {
+		if entry.IsDir() {
+			continue
+		}
+		if err := os.Remove(filepath.Join(hooksDst, entry.Name())); err != nil && !os.IsNotExist(err) {
 			return err
 		}
+	}
+	if err := os.Remove(filepath.Join(configDir, prov.AgentsDir(), "doc-keeper.md")); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 
 	// Directories to remove (ignore not-exist errors).
@@ -535,27 +586,8 @@ func UninstallMemcli(prov provider.Provider) error {
 		return nil
 	}
 
-	var eventSlice []any
-	if raw, ok := hooksMap["Stop"]; ok {
-		eventSlice, _ = raw.([]any)
-	}
-	if len(eventSlice) == 0 {
-		return nil
-	}
-
-	// Filter out entries whose command references stop-hook.sh.
-	filtered := make([]any, 0, len(eventSlice))
-	for _, item := range eventSlice {
-		if !hookCommandContains(item, "stop-hook.sh") {
-			filtered = append(filtered, item)
-		}
-	}
-
-	if len(filtered) == 0 {
-		delete(hooksMap, "Stop")
-	} else {
-		hooksMap["Stop"] = filtered
-	}
+	uninstallHookEntry(hooksMap, "Stop", MemcliStopHookScript)
+	uninstallHookEntry(hooksMap, "SessionStart", MemcliSessionStartHookScript)
 
 	if len(hooksMap) == 0 {
 		delete(existing, "hooks")

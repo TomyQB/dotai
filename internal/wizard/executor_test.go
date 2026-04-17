@@ -182,6 +182,9 @@ func TestExecutor_FullInstall(t *testing.T) {
 			StatusLine:   wizard.StatusLineConfig{Command: "statusline-command.sh"},
 			Hooks: []wizard.HookEntry{
 				{Event: "PreToolUse", Command: "dotai/pre-tool.sh"},
+				// Memcli step populates these when the user confirms Yes.
+				{Event: "Stop", Command: "bash /hooks/" + wizard.MemcliStopHookScript},
+				{Event: "SessionStart", Command: "bash /hooks/" + wizard.MemcliSessionStartHookScript},
 			},
 		},
 	}
@@ -203,9 +206,12 @@ func TestExecutor_FullInstall(t *testing.T) {
 	assertDirExists(t, hooksDir)
 	assertFileExecutable(t, filepath.Join(hooksDir, "git-branch-check.sh"))
 
-	// Memcli hooks are executable.
+	// Memcli hooks are executable (session-start, stop, pre-commit) and the
+	// Python matcher that stop-hook shells out to is copied alongside.
 	assertFileExecutable(t, filepath.Join(hooksDir, "pre-commit.sh"))
 	assertFileExecutable(t, filepath.Join(hooksDir, "stop-hook.sh"))
+	assertFileExecutable(t, filepath.Join(hooksDir, "session-start-hook.sh"))
+	assertFileExists(t, filepath.Join(hooksDir, "stop-hook-matcher.py"))
 
 	// Statusline script present and executable.
 	assertFileExecutable(t, filepath.Join(dir, "statusline-command.sh"))
@@ -233,6 +239,12 @@ func TestExecutor_FullInstall(t *testing.T) {
 		}
 		if _, ok := hooksMap["PreToolUse"]; !ok {
 			t.Error("hooks missing 'PreToolUse' entry")
+		}
+		if _, ok := hooksMap["Stop"]; !ok {
+			t.Error("hooks missing 'Stop' entry (memcli stop-hook)")
+		}
+		if _, ok := hooksMap["SessionStart"]; !ok {
+			t.Error("hooks missing 'SessionStart' entry (memcli session-start-hook)")
 		}
 	}
 }
