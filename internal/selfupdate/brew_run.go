@@ -2,6 +2,7 @@ package selfupdate
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io"
 	"os/exec"
@@ -21,6 +22,16 @@ type RunResult struct {
 	ExitErr error
 }
 
+// brewCmd constructs a *exec.Cmd for brew with HOMEBREW_NO_AUTO_UPDATE=1 in
+// its environment so it never kicks off a background refresh during the
+// user-requested operation. The only invocation that should refresh the
+// index is the explicit `brew update` we run ourselves.
+func brewCmd(args ...string) *exec.Cmd {
+	cmd := exec.Command("brew", args...)
+	cmd.Env = brewEnv()
+	return cmd
+}
+
 // RunBrewUpgrade executes `brew update` followed by `brew upgrade dotai`,
 // streaming every stdout/stderr line into onLine as it arrives. The call
 // blocks until both commands finish.
@@ -32,12 +43,15 @@ func RunBrewUpgrade(onLine func(string)) RunResult {
 	if onLine != nil {
 		onLine("$ brew update")
 	}
+	// `brew update` explicitly asks for a refresh — bypass the NO_AUTO_UPDATE
+	// guard by invoking exec.Command directly so the env does not suppress
+	// the very operation we want.
 	_ = streamCmd(exec.Command("brew", "update"), onLine)
 
 	if onLine != nil {
 		onLine("$ brew upgrade dotai")
 	}
-	upgradeOut, upgradeErr := streamCmdCollect(exec.Command("brew", "upgrade", "dotai"), onLine)
+	upgradeOut, upgradeErr := streamCmdCollect(brewCmd("upgrade", "dotai"), onLine)
 
 	return RunResult{
 		UpdatedDotai: upgradeErr == nil && brewReplacedDotai(upgradeOut),
@@ -53,7 +67,7 @@ func RunBrewInstall(formula string, onLine func(string)) error {
 	if onLine != nil {
 		onLine("$ brew install " + formula)
 	}
-	return streamCmd(exec.Command("brew", "install", formula), onLine)
+	return streamCmd(brewCmd("install", formula), onLine)
 }
 
 // RunBrewUninstall uninstalls a formula by bare name (no tap prefix needed),
@@ -62,14 +76,19 @@ func RunBrewUninstall(formula string, onLine func(string)) error {
 	if onLine != nil {
 		onLine("$ brew uninstall " + formula)
 	}
-	return streamCmd(exec.Command("brew", "uninstall", formula), onLine)
+	return streamCmd(brewCmd("uninstall", formula), onLine)
 }
 
 // IsBrewFormulaInstalled reports whether a given formula name is present in
-// `brew list --formula`. Mirrors the detection used by Detect() for dotai
-// but for any formula name.
+// `brew list --formula`. Bounded by detectTimeout so a hung brew (lock from
+// another process, auto-update fetching a slow mirror) cannot stall the UI.
+// Any error — timeout, non-zero exit, brew not on PATH — is treated as
+// "not installed" rather than surfaced, so callers stay on a simple bool.
 func IsBrewFormulaInstalled(name string) bool {
-	out, err := exec.Command("brew", "list", "--formula", "-1").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), detectTimeout)
+	defer cancel()
+
+	out, err := brewListContext(ctx)
 	if err != nil {
 		return false
 	}
