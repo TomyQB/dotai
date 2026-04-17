@@ -60,10 +60,17 @@ func RunBrewUpgrade(onLine func(string)) RunResult {
 }
 
 // RunBrewInstall installs a tap-qualified formula, streaming output line by
-// line via onLine. Returns the exit error from brew (nil on success). Does
-// NOT run `brew update` first — callers that want a fresh index should call
-// RunBrewUpgrade's underlying step separately if needed.
+// line via onLine. Runs `brew update` first so the tap is fresh — otherwise
+// a recent release published under the tap may not be visible locally for
+// up to 24 h (HOMEBREW_AUTO_UPDATE_SECS default), and the install would
+// fetch a stale bottle version. Returns the exit error from the install
+// step (an `update` failure is tolerated and logged but not fatal).
 func RunBrewInstall(formula string, onLine func(string)) error {
+	if onLine != nil {
+		onLine("$ brew update")
+	}
+	_ = streamCmd(exec.Command("brew", "update"), onLine)
+
 	if onLine != nil {
 		onLine("$ brew install " + formula)
 	}
