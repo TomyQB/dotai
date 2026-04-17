@@ -17,6 +17,7 @@ import (
 
 func main() {
 	resumedUpdate := false
+	localMode := false
 
 	// Handle --version/-v and --help/-h flags before touching the terminal.
 	if len(os.Args) > 1 {
@@ -30,8 +31,11 @@ func main() {
 			fmt.Println("\nCommands:")
 			fmt.Println("  version    Print version")
 			fmt.Println("  help       Print this help")
+			fmt.Println("  local      Manage profiles in the current repo's .claude/")
 			fmt.Println("\nRun with no arguments to launch the interactive menu.")
 			return
+		case "local":
+			localMode = true
 		case "--resume-update":
 			// Internal flag set by the Update screen when it re-execs itself
 			// after `brew upgrade dotai`. Jumps directly into the file-apply
@@ -46,26 +50,35 @@ func main() {
 		return
 	}
 
-	prov := claude.New()
-	if _, err := prov.ConfigDir(); err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Build step factories so each wizard invocation gets fresh steps with clean
-	// state. Factories are created here to avoid an import cycle
-	// (wizard → wizard/steps → wizard is forbidden).
-	factories := []app.StepFactory{
-		func() wizard.Step { return steps.NewProfile(prov) },
-		func() wizard.Step { return steps.NewSkills(prov) },
-		func() wizard.Step { return steps.NewMemcli(prov) },
-	}
-
 	var root tea.Model
-	if resumedUpdate {
-		root = app.NewResumedUpdate(prov, factories)
+	if localMode {
+		cwd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+			os.Exit(1)
+		}
+		root = app.NewLocal(cwd)
 	} else {
-		root = app.New(prov, factories)
+		prov := claude.New()
+		if _, err := prov.ConfigDir(); err != nil {
+			fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Build step factories so each wizard invocation gets fresh steps with
+		// clean state. Factories are created here to avoid an import cycle
+		// (wizard → wizard/steps → wizard is forbidden).
+		factories := []app.StepFactory{
+			func() wizard.Step { return steps.NewProfile(prov) },
+			func() wizard.Step { return steps.NewSkills(prov) },
+			func() wizard.Step { return steps.NewMemcli(prov) },
+		}
+
+		if resumedUpdate {
+			root = app.NewResumedUpdate(prov, factories)
+		} else {
+			root = app.New(prov, factories)
+		}
 	}
 	p := tea.NewProgram(root, tea.WithAltScreen())
 

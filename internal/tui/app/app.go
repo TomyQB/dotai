@@ -8,6 +8,10 @@ import (
 
 	"github.com/TomyQB/dotai/internal/provider"
 	"github.com/TomyQB/dotai/internal/tui/doctor"
+	"github.com/TomyQB/dotai/internal/tui/localdoctor"
+	"github.com/TomyQB/dotai/internal/tui/localinstall"
+	"github.com/TomyQB/dotai/internal/tui/localstatus"
+	"github.com/TomyQB/dotai/internal/tui/localuninstall"
 	"github.com/TomyQB/dotai/internal/tui/memclipanel"
 	"github.com/TomyQB/dotai/internal/tui/menu"
 	"github.com/TomyQB/dotai/internal/tui/messages"
@@ -27,8 +31,12 @@ type Model struct {
 	stack     []messages.Screen
 	prov      provider.Provider
 	factories []StepFactory
-	width     int
-	height    int
+	// localTargetDir is set when the app runs in `dotai local` mode. It holds
+	// the working directory that local-mode screens operate on. Empty in
+	// global mode.
+	localTargetDir string
+	width          int
+	height         int
 }
 
 // New constructs a Model with the main menu as the initial screen.
@@ -40,6 +48,17 @@ func New(prov provider.Provider, factories []StepFactory) Model {
 		stack:     []messages.Screen{m},
 		prov:      prov,
 		factories: factories,
+	}
+}
+
+// NewLocal constructs a Model whose initial screen is the local-mode menu
+// bound to targetDir. Used by `dotai local` — local screens operate on the
+// target repository's .claude/ folder rather than the global config dir.
+func NewLocal(targetDir string) Model {
+	m := menu.NewLocal(targetDir)
+	return Model{
+		stack:          []messages.Screen{m},
+		localTargetDir: targetDir,
 	}
 }
 
@@ -101,6 +120,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case menu.SelectedMsg:
 		return m.handleMenuAction(msg.Action)
+
+	case menu.LocalSelectedMsg:
+		return m.handleLocalMenuAction(msg.Action)
 	}
 
 	// Default: forward the message to the active screen.
@@ -176,6 +198,36 @@ func (m Model) handleMenuAction(action menu.Action) (tea.Model, tea.Cmd) {
 		return m, s.Init()
 
 	case menu.ActionQuit:
+		return m, tea.Quit
+	}
+
+	return m, nil
+}
+
+// handleLocalMenuAction dispatches a local-menu selection to its screen.
+func (m Model) handleLocalMenuAction(action menu.LocalAction) (tea.Model, tea.Cmd) {
+	switch action {
+	case menu.LocalActionInstall:
+		s := localinstall.New(m.localTargetDir)
+		m.push(s)
+		return m, s.Init()
+
+	case menu.LocalActionUninstall:
+		s := localuninstall.New(m.localTargetDir)
+		m.push(s)
+		return m, s.Init()
+
+	case menu.LocalActionStatus:
+		s := localstatus.New(m.localTargetDir)
+		m.push(s)
+		return m, s.Init()
+
+	case menu.LocalActionDoctor:
+		s := localdoctor.New(m.localTargetDir)
+		m.push(s)
+		return m, s.Init()
+
+	case menu.LocalActionQuit:
 		return m, tea.Quit
 	}
 
