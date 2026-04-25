@@ -137,10 +137,23 @@ func (e *Executor) apply(state *WizardState) error {
 		}
 	}
 
-	// Step 8: copy git branch hook.
+	// Step 8: copy git branch hook (per profile).
+	// Layout under files/hooks/:
+	//   shared/    — copied always (references docs)
+	//   personal/  — copied when ProfileType == ProfilePersonal
+	//   work/      — copied when ProfileType == ProfileWork (also fallback for
+	//                legacy installs without a profile marker, to preserve the
+	//                pre-split gitflow behavior they had before).
 	if state.GitBranchHookEnabled {
 		hooksDst := filepath.Join(configDir, e.prov.ToolDir(), "hooks")
-		if err := copyTree(assets.FS, "files/hooks", hooksDst); err != nil {
+		if err := copyTree(assets.FS, "files/hooks/shared", hooksDst); err != nil {
+			return err
+		}
+		profileDir := "work"
+		if state.ProfileType == ProfilePersonal {
+			profileDir = "personal"
+		}
+		if err := copyTree(assets.FS, "files/hooks/"+profileDir, hooksDst); err != nil {
 			return err
 		}
 	}
