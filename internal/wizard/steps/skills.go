@@ -46,6 +46,8 @@ func availableSkills() []SkillInfo {
 		{DirName: "readme-generator", DisplayName: "Readme Generator", Description: "Generate professional READMEs"},
 		{DirName: "skill-creator", DisplayName: "Skill Creator", Description: "Create new AI agent skills"},
 		{DirName: "commit-and-push", DisplayName: "Commit & Push", Description: "Conventional commits workflow"},
+		{DirName: "create-pr", DisplayName: "Create PR", Description: "Open/refresh GitHub PRs with functional context"},
+		{DirName: "full-review", DisplayName: "Full Review", Description: "Audit + review + simplify quality gate"},
 		{DirName: "junit-mockito", DisplayName: "JUnit Mockito", Description: "Java unit testing patterns"},
 		{DirName: "owasp-audit", DisplayName: "OWASP Audit", Description: "OWASP ASVS security audit"},
 		{DirName: "web3-audit", DisplayName: "Web3 Audit", Description: "Web3 security audit"},
